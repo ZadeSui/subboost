@@ -15,14 +15,15 @@
     {
       "binding": "DB",
       "database_name": "subboost",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "9e2f54f6-61b9-4a79-b855-fa718c990110",
       "migrations_dir": "prisma/d1-migrations"
     }
   ],
   "vars": {
     "SUBBOOST_CLOUDFLARE": "true",
     "TRUST_PROXY_HEADERS": "true",
-    "APP_RELEASE_VERSION": "2.11.0"
+    "APP_RELEASE_VERSION": "2.11.0",
+    "APP_URL": "subboost.suizd.cc"
   },
   "triggers": { "crons": ["*/6 * * * *", "3 * * * *"] },
   "observability": { "enabled": true }
