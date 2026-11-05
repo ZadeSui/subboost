@@ -52,6 +52,8 @@ export default defineConfig([
     ".next/**",
     "dist/**",
     "local/.next/**",
+    "local/.open-next/**",
+    "local/.wrangler/**",
     "local/next-env.d.ts",
     "local/src/generated/**",
     "node_modules/**",

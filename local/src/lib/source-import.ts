@@ -106,6 +106,19 @@ async function validatePublicFetchTarget(
 
   if (isIP(hostname)) return { ok: true, addresses: [hostname] };
 
+  // Workers has no dns.lookup or custom TLS SNI for IP-pinned node:http.
+  // Validate with DoH, then use its strictly-public native fetch transport.
+  if (process.env.SUBBOOST_CLOUDFLARE === "true") {
+    const addresses = await resolveHostnameByDoh(hostname, { timeoutMs: DOH_TIMEOUT_MS });
+    if (!addresses.length) {
+      return { ok: false, failure: toSecurityFailure("无法解析订阅域名") };
+    }
+    if (addresses.some((address) => isPrivateOrReservedIp(address))) {
+      return { ok: false, failure: toSecurityFailure("禁止访问本机或内网地址") };
+    }
+    return { ok: true, addresses: null };
+  }
+
   const records = await lookup(hostname, { all: true, verbatim: true }).catch(() => null);
   if (!records || records.length === 0) {
     // Compatibility fallback documented for local: if DNS validation cannot
@@ -197,7 +210,7 @@ async function fetchTextDirect(
       if (!validation.ok) return validation.failure;
 
       const method = request.purpose === "userinfo" ? "HEAD" : "GET";
-      response = validation.addresses
+      response = validation.addresses && process.env.SUBBOOST_CLOUDFLARE !== "true"
         ? await requestPinnedText({
             url: currentUrl,
             addresses: validation.addresses,

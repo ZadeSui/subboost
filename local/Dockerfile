@@ -47,7 +47,8 @@ COPY local local
 WORKDIR /package/local
 RUN npm run build
 
-FROM deps AS production-deps
+FROM builder AS production-deps
+WORKDIR /package
 RUN npm prune --omit=dev
 
 FROM node:24.22.1-alpine AS runner

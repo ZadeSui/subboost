@@ -20,7 +20,7 @@ const roots = (requestedRoots.length > 0 ? requestedRoots : ["packages", "local"
   .map((entry) => path.resolve(workspaceRoot, entry))
   .filter((entry) => fs.existsSync(entry));
 
-const ignoredDirectoryNames = new Set([".next", "dist", "generated", "node_modules"]);
+const ignoredDirectoryNames = new Set([".next", ".open-next", ".wrangler", "dist", "generated", "node_modules"]);
 const findings = [];
 
 // Dark-only colors break the light theme. Colors that change between themes come from

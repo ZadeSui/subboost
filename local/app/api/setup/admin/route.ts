@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
+import { createFirstD1Admin } from "@local/lib/d1-admin";
 import { getLocalAdminSetupCredentialError, LOCAL_ADMIN_CREDENTIAL_MESSAGES } from "@local/lib/admin-credentials";
 import { apiError, getStringField, jsonBodyError, LOCAL_JSON_BODY_LIMITS, readJsonBody } from "@local/lib/http";
 import { prisma } from "@local/lib/prisma";
@@ -45,7 +46,9 @@ export async function POST(request: Request) {
   }
 
   const passwordHash = await bcrypt.hash(password, 12);
-  const admin = await prisma.$transaction(async (transaction) => {
+  const admin = process.env.SUBBOOST_CLOUDFLARE === "true"
+    ? await createFirstD1Admin(username, passwordHash)
+    : await prisma.$transaction(async (transaction) => {
     await transaction.$queryRaw`SELECT pg_advisory_xact_lock(${1_397_704_283}) IS NULL AS "locked"`;
     if (await transaction.localAdmin.count()) return null;
     return transaction.localAdmin.create({

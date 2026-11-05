@@ -20,3 +20,5 @@ jobs:
       - run: npm run lint
       - run: npm run test:coverage
       - run: npm run check:local-app
+      - run: npm run build:worker
+      - run: npm exec --workspace @subboost/local -- wrangler deploy --dry-run

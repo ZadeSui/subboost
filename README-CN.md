@@ -34,6 +34,7 @@
 
 ## 使用和部署
 
+- Cloudflare Workers + D1：[部署说明](docs/cloudflare-workers.md)（完整应用、SQLite 数据库和定时刷新）。
 - 在线入口：[无需部署 - 直接使用的公益服务](https://subboost.org)
 - 部署文档：[一键部署 - 拉取镜像构建，速度快配置要求低](https://docs.subboost.org/deploy/one-click)
 - 部署文档：[高级部署 - 编译源码构建，速度慢配置要求高](https://docs.subboost.org/deploy/advanced)

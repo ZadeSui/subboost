@@ -12,7 +12,13 @@
   ],
   "scripts": {
     "dev": "npm --workspace @subboost/local run dev",
+    "generate:parsers": "node scripts/generate-platform-parsers.cjs",
     "build": "npm --workspace @subboost/local run build",
+    "build:worker": "npm --workspace @subboost/local run build:worker",
+    "preview": "npm --workspace @subboost/local run preview",
+    "deploy": "npm --workspace @subboost/local run deploy",
+    "db:migrate": "npm --workspace @subboost/local run db:d1:migrate",
+    "db:migrate:local": "npm --workspace @subboost/local run db:d1:migrate:local",
     "test:unit": "vitest run",
     "test:coverage": "vitest run --config vitest.coverage.ts --coverage",
     "test:core": "vitest run --config vitest.core.config.ts",
@@ -49,7 +55,7 @@
     "jose": "^6.2.13",
     "js-yaml": "^5.5.0",
     "lucide-react": "^1.61.0",
-    "next": "^16.4.2",
+    "next": "^16.4.5",
     "peggy": "^5.1.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
@@ -83,6 +89,8 @@
     "valibot": "1.5.0"
   },
   "allowScripts": {
+    "esbuild@0.28.2": true,
+    "workerd@1.20261103.1": true,
     "@prisma/engines@7.10.1": true,
     "prisma@7.10.1": true,
     "unrs-resolver@1.12.2": true

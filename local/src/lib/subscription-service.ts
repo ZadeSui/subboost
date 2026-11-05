@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
+import { writeD1Subscription } from "./d1";
 import { generateClashYaml } from "@subboost/core/generator";
 import { buildGenerateOptionsFromConfig, getEffectiveTestOptions } from "@subboost/core/subscription/config-utils";
 import { buildProxyProvidersFromConfig } from "@subboost/core/subscription/proxy-providers";
@@ -279,6 +280,13 @@ export async function updateSubscription(ownerId: string, id: string, body: unkn
     resetAutoUpdateState = current.autoUpdateInterval === null && nextAutoUpdateInterval !== null;
   }
 
+  if (process.env.SUBBOOST_CLOUDFLARE === "true") {
+    const updated = await writeD1Subscription(current.id, current.updatedAt, data,
+      resetAutoUpdateState ? createResetSubscriptionAutoUpdateState() : undefined);
+    if (!updated) throw new Error("Subscription changed while update was in progress.");
+    const row = await prisma.subscription.findUniqueOrThrow({ where: { id: current.id }, include: { autoUpdateState: true } });
+    return formatSubscription(row);
+  }
   const row = await prisma.$transaction(async (tx) => {
     if (resetAutoUpdateState) {
       await tx.subscriptionAutoUpdateState.upsert({
@@ -366,6 +374,15 @@ async function persistRefreshSuccess(params: {
   config: Record<string, unknown>;
   cachedAt: Date;
 }): Promise<boolean> {
+  if (process.env.SUBBOOST_CLOUDFLARE === "true") {
+    return writeD1Subscription(params.subscriptionId, params.expectedUpdatedAt, {
+      encryptedNodes: encryptJson(params.snapshot.nodes),
+      encryptedConfig: encryptJson(params.config),
+      encryptedSubscriptionInfo: encryptJson(params.snapshot.subscriptionInfo),
+      lastUpdatedAt: params.cachedAt,
+      cacheExpiresAt: buildSubscriptionCacheExpiry(params.cachedAt),
+    }, createResetSubscriptionAutoUpdateState());
+  }
   return prisma.$transaction(async (tx) => {
     const updated = await tx.subscription.updateMany({
       where: { id: params.subscriptionId, updatedAt: params.expectedUpdatedAt },

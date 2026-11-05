@@ -34,6 +34,7 @@
 
 ## Usage & Deployment
 
+- Cloudflare Workers + D1: [Deployment guide (Chinese)](docs/cloudflare-workers.md), including SQLite storage and scheduled updates.
 - Online entry: [No deployment required - direct access to the public service](https://subboost.org)
 - Deployment docs: [One-click deployment - pulls an image to build, faster with lower requirements](https://docs.subboost.org/deploy/one-click)
 - Deployment docs: [Advanced deployment - compiles from source, slower with higher requirements](https://docs.subboost.org/deploy/advanced)

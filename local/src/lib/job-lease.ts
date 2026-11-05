@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { prisma } from "./prisma";
+import { d1Value, getD1Database } from "./d1";
 
 export type LocalJobLease = {
   name: string;
@@ -22,6 +23,15 @@ export async function acquireLocalJobLease(params: {
   const now = params.now ?? new Date();
   const ownerToken = randomUUID();
   const expiresAt = new Date(now.getTime() + params.leaseMs);
+  if (process.env.SUBBOOST_CLOUDFLARE === "true") {
+    const row = await getD1Database().prepare(`
+      INSERT INTO "JobLeaseLock" ("name", "ownerToken", "expiresAt", "updatedAt") VALUES (?, ?, ?, ?)
+      ON CONFLICT ("name") DO UPDATE SET "ownerToken" = excluded."ownerToken",
+        "expiresAt" = excluded."expiresAt", "updatedAt" = excluded."updatedAt"
+      WHERE "JobLeaseLock"."expiresAt" <= ? RETURNING "name"`)
+      .bind(params.name, ownerToken, d1Value(expiresAt), d1Value(now), d1Value(now)).first();
+    return row ? { name: params.name, ownerToken, expiresAt } : null;
+  }
   const rows = await prisma.$queryRaw<LocalJobLease[]>`
     INSERT INTO "JobLeaseLock" ("name", "ownerToken", "expiresAt", "updatedAt")
     VALUES (${params.name}, ${ownerToken}, ${expiresAt}, ${now})
@@ -41,6 +51,13 @@ export async function renewLocalJobLease(
   now = new Date()
 ): Promise<boolean> {
   const expiresAt = new Date(now.getTime() + leaseMs);
+  if (process.env.SUBBOOST_CLOUDFLARE === "true") {
+    const result = await getD1Database().prepare(`UPDATE "JobLeaseLock" SET "expiresAt" = ?, "updatedAt" = ?
+      WHERE "name" = ? AND "ownerToken" = ? AND "expiresAt" > ?`)
+      .bind(d1Value(expiresAt), d1Value(now), lease.name, lease.ownerToken, d1Value(now)).run();
+    if (result.meta.changes === 1) lease.expiresAt = expiresAt;
+    return result.meta.changes === 1;
+  }
   const count = await prisma.$executeRaw`
     UPDATE "JobLeaseLock"
     SET "expiresAt" = ${expiresAt}, "updatedAt" = ${now}
@@ -53,6 +70,11 @@ export async function renewLocalJobLease(
 }
 
 export async function releaseLocalJobLease(lease: LocalJobLease): Promise<void> {
+  if (process.env.SUBBOOST_CLOUDFLARE === "true") {
+    await getD1Database().prepare('DELETE FROM "JobLeaseLock" WHERE "name" = ? AND "ownerToken" = ?')
+      .bind(lease.name, lease.ownerToken).run();
+    return;
+  }
   await prisma.$executeRaw`
     DELETE FROM "JobLeaseLock"
     WHERE "name" = ${lease.name} AND "ownerToken" = ${lease.ownerToken}

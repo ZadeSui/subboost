@@ -20,6 +20,7 @@ import {
 } from "@subboost/server-core/subscription";
 import { encryptJson } from "./crypto";
 import { prisma } from "./prisma";
+import { writeD1Subscription } from "./d1";
 import {
   buildSubscriptionCacheExpiry,
   buildSubscriptionFetchCallbacks,
@@ -63,6 +64,9 @@ async function writeAutoUpdateState(
   assertLease?: () => Promise<void>
 ): Promise<boolean> {
   await assertLease?.();
+  if (process.env.SUBBOOST_CLOUDFLARE === "true") {
+    return writeD1Subscription(subscriptionId, expectedUpdatedAt, extraSubscriptionData, state);
+  }
   return prisma.$transaction(async (tx) => {
     const updated = await tx.subscription.updateMany({
       where: { id: subscriptionId, updatedAt: expectedUpdatedAt },

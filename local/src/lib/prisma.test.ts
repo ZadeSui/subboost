@@ -3,12 +3,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   PrismaClient: vi.fn(),
   PrismaPg: vi.fn(),
+  getCloudflareContext: vi.fn(),
+  PrismaD1: vi.fn(),
 }));
 
 async function loadPrismaModule(env: { DATABASE_URL?: string; NODE_ENV?: string }, existing?: unknown) {
   vi.resetModules();
   vi.doMock("@prisma/adapter-pg", () => ({ PrismaPg: mocks.PrismaPg }));
-  vi.doMock("../generated/prisma", () => ({ PrismaClient: mocks.PrismaClient }));
+  vi.doMock("@prisma/client", () => ({ PrismaClient: mocks.PrismaClient }));
+  vi.doMock("@opennextjs/cloudflare", () => ({ getCloudflareContext: mocks.getCloudflareContext }));
+  vi.doMock("@prisma/adapter-d1", () => ({ PrismaD1: mocks.PrismaD1 }));
 
   vi.stubEnv("DATABASE_URL", env.DATABASE_URL);
   vi.stubEnv("NODE_ENV", env.NODE_ENV);
@@ -33,6 +37,7 @@ describe("local prisma singleton", () => {
     mocks.PrismaClient.mockImplementation(function PrismaClient(this: { clientOptions: unknown }, options: unknown) {
       this.clientOptions = options;
     });
+    mocks.PrismaD1.mockImplementation(function PrismaD1() {});
   });
 
   afterEach(() => {
@@ -41,7 +46,9 @@ describe("local prisma singleton", () => {
     vi.unstubAllEnvs();
     delete (globalThis as { localPrisma?: unknown }).localPrisma;
     vi.doUnmock("@prisma/adapter-pg");
-    vi.doUnmock("../generated/prisma");
+    vi.doUnmock("@prisma/client");
+    vi.doUnmock("@opennextjs/cloudflare");
+    vi.doUnmock("@prisma/adapter-d1");
   });
 
   it("creates a development client with a trimmed configured database URL", async () => {
@@ -83,5 +90,22 @@ describe("local prisma singleton", () => {
     });
     expect((globalThis as { localPrisma?: unknown }).localPrisma).toBeUndefined();
     expect(mod.prisma).toEqual(expect.objectContaining({ clientOptions: expect.any(Object) }));
+  });
+
+  it("lazily creates a separate client for each Workers invocation", async () => {
+    vi.stubEnv("SUBBOOST_CLOUDFLARE", "true");
+    const mod = await loadPrismaModule({ NODE_ENV: "production" });
+    expect(mocks.PrismaClient).not.toHaveBeenCalled();
+    const ctx = {};
+    const DB = { database: true };
+    mocks.getCloudflareContext.mockReturnValue({ ctx, env: { DB } });
+    Reflect.get(mod.prisma, "clientOptions");
+    Reflect.get(mod.prisma, "clientOptions");
+    expect(mocks.PrismaClient).toHaveBeenCalledTimes(1);
+    expect(mocks.PrismaD1).toHaveBeenCalledWith(DB);
+    expect(mocks.PrismaPg).not.toHaveBeenCalled();
+    mocks.getCloudflareContext.mockReturnValue({ ctx: {}, env: { DB } });
+    Reflect.get(mod.prisma, "clientOptions");
+    expect(mocks.PrismaClient).toHaveBeenCalledTimes(2);
   });
 });

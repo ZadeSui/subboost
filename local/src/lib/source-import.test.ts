@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fetchSourceUserInfoHeadersDirect, importSourceUrlDirect } from "./source-import";
 
 const mocks = vi.hoisted(() => ({
@@ -68,12 +68,35 @@ async function runTransport(url: string, overrides: Record<string, unknown> = {}
 }
 
 describe("local source import transport", () => {
+  afterEach(() => vi.unstubAllEnvs());
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getAllowUnsafeSubscriptionSources.mockResolvedValue(false);
     mocks.lookup.mockRejectedValue(new Error("dns unavailable"));
     mocks.requestPinnedText.mockResolvedValue({ status: 200, headers: {}, content: "ss://node" });
     globalThis.fetch = vi.fn();
+  });
+
+  it("uses DoH and native fetch on Workers without node DNS or pinned HTTP", async () => {
+    vi.stubEnv("SUBBOOST_CLOUDFLARE", "true");
+    vi.mocked(globalThis.fetch).mockImplementation(async (url) =>
+      String(url).includes("dns-query") ? dnsResponse(["93.184.216.34"]) : response("ss://node")
+    );
+    await expect(runTransport("https://example.com/sub")).resolves.toMatchObject({ ok: true, content: "ss://node" });
+    expect(mocks.lookup).not.toHaveBeenCalled();
+    expect(mocks.requestPinnedText).not.toHaveBeenCalled();
+  });
+
+  it("rejects private DNS answers and private redirects on Workers", async () => {
+    vi.stubEnv("SUBBOOST_CLOUDFLARE", "true");
+    vi.mocked(globalThis.fetch).mockImplementation(async () => dnsResponse(["10.0.0.1"]));
+    await expect(runTransport("https://example.com/sub")).resolves.toMatchObject({ ok: false, errorInfo: { category: "security" } });
+    vi.mocked(globalThis.fetch).mockImplementation(async (url) =>
+      String(url).includes("dns-query") ? dnsResponse(["93.184.216.34"])
+        : response("", { status: 302, headers: { location: "http://127.0.0.1/sub" } })
+    );
+    await expect(runTransport("https://example.com/sub")).resolves.toMatchObject({ ok: false, errorInfo: { category: "security" } });
+    expect(mocks.requestPinnedText).not.toHaveBeenCalled();
   });
 
   it("rejects private, local, credentialed, and unsupported URLs before fetching", async () => {
