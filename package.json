@@ -17,6 +17,8 @@
     "build:worker": "npm --workspace @subboost/local run build:worker",
     "preview": "npm --workspace @subboost/local run preview",
     "deploy": "npm --workspace @subboost/local run deploy",
+    "deploy:worker": "npm --workspace @subboost/local run deploy:worker",
+    "deploy:dry-run": "npm --workspace @subboost/local run deploy:dry-run",
     "db:migrate": "npm --workspace @subboost/local run db:d1:migrate",
     "db:migrate:local": "npm --workspace @subboost/local run db:d1:migrate:local",
     "test:unit": "vitest run",

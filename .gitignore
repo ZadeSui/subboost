@@ -25,3 +25,4 @@ yarn-error.log*
 .dev.vars.*
 !.dev.vars.example
 local/prisma/schema.d1.prisma
+local/.wrangler-deploy-*.jsonc

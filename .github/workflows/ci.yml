@@ -17,8 +17,9 @@ jobs:
         with:
           node-version: "24.22.1"
       - run: npm ci
+      - run: node --test local/scripts/worker-deployment.test.cjs
       - run: npm run lint
       - run: npm run test:coverage
       - run: npm run check:local-app
       - run: npm run build:worker
-      - run: npm exec --workspace @subboost/local -- wrangler deploy --dry-run
+      - run: npm run deploy:dry-run

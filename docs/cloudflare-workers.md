@@ -13,7 +13,9 @@ npx wrangler login
 npx wrangler d1 create subboost
 ```
 
-将返回的 database_id 填入 `local/wrangler.jsonc` 的 d1_databases 配置，替换全零占位值，保留 binding 为 DB。数据库名称可以修改，但需要与 Cloudflare 创建的数据库一致。
+复制创建结果中的 database_id，将它配置为构建 Secret `D1_DATABASE_ID`。不要把真实 ID 写入 `local/wrangler.jsonc`；该文件的全零 ID 用于本地预览和无凭据构建，binding 保持为 DB。
+
+D1 绑定需要在部署时确定，Worker 的运行时 Secret 不能替代绑定配置。部署和远程迁移脚本从构建进程的 `D1_DATABASE_ID` 环境变量读取 UUID，生成 Git 忽略的临时 Wrangler 配置，命令结束后删除。未设置或格式不正确时会直接报错。
 
 默认 Worker 名称为 subboost。如果修改 wrangler.jsonc 的 name，必须同步修改 services 中的 service，让 WORKER_SELF_REFERENCE 指向自身。
 
@@ -50,11 +52,16 @@ node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 
 回到仓库根目录执行：
 
-```sh
+PowerShell：
+
+```powershell
 cd ..
+$env:D1_DATABASE_ID = '你的D1数据库UUID'
 npm run db:migrate
 npm run deploy
 ```
+
+Bash 中先执行 `export D1_DATABASE_ID='你的D1数据库UUID'`，再执行上述 npm 命令。
 
 db:migrate 将 `local/prisma/d1-migrations` 中的 SQLite 迁移应用到远程 D1。deploy 构建 SQLite Prisma Client、Next.js 和 Worker 后部署。已有 D1 数据时，升级前先备份。迁移不会自动导入原 PostgreSQL 数据。
 
@@ -68,10 +75,14 @@ db:migrate 将 `local/prisma/d1-migrations` 中的 SQLite 迁移应用到远程 
 
 - 安装命令：`npm ci`
 - 构建命令：`npm run build:worker`
-- 部署命令：`npm exec --workspace @subboost/local -- opennextjs-cloudflare deploy`
+- 部署命令：`npm run deploy:worker`
 - NODE_VERSION 设置为符合 engines 的版本。
 
-先创建 D1、填写 database_id 并执行远程迁移，在 Worker 设置中配置运行时密钥。后续有数据库结构变更时需先执行新迁移。
+在 **Worker → 设置 → 构建 → 变量和机密** 中添加类型为 Secret 的 `D1_DATABASE_ID`，值为 D1 数据库 UUID。这个 Secret 用于构建／部署进程，请勿只添加到 Worker 的运行时变量中。
+
+先创建 D1，并在本地设置同名环境变量执行一次远程迁移。在 Worker 的运行时设置中配置 APP_URL、ENCRYPTION_KEY 等机密。后续有数据库结构变更时需先执行新迁移。
+
+部署命令必须使用 `npm run deploy:worker`，直接运行 opennextjs-cloudflare deploy 或 wrangler deploy 不会注入真实数据库 ID。CI 的 `npm run deploy:dry-run` 可以不设置 D1_DATABASE_ID，不访问远程数据库。
 
 ## 本地 D1 预览
 
