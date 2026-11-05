@@ -23,7 +23,7 @@
     "SUBBOOST_CLOUDFLARE": "true",
     "TRUST_PROXY_HEADERS": "true",
     "APP_RELEASE_VERSION": "2.11.0",
-    "APP_URL": "subboost.suizd.cc"
+    "APP_URL": "https://subboost.suizd.cc"
   },
   "triggers": { "crons": ["*/6 * * * *", "3 * * * *"] },
   "observability": { "enabled": true }
