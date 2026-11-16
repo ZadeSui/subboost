@@ -107,6 +107,14 @@ export type GeneratedSubscriptionYaml = {
   isAdmin: boolean;
 };
 
+type SubscriptionYamlInputs = Pick<SubscriptionRow, "encryptedNodes" | "encryptedConfig" | "encryptedSubscriptionInfo">;
+type SubscriptionYamlContent = Pick<GeneratedSubscriptionYaml, "yaml" | "subscriptionInfo">;
+
+// Keep the cache private to the isolate. Every request still resolves the current token in the database.
+const workerYamlCache = new Map<string, { inputs: SubscriptionYamlInputs; content: SubscriptionYamlContent }>();
+const MAX_YAML_CACHE_ENTRIES = 16;
+const MAX_YAML_CACHE_ENTRY_LENGTH = 512 * 1024;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -460,26 +468,68 @@ export async function refreshSubscription(ownerId: string, id: string) {
   };
 }
 
-export async function generateSubscriptionYaml(token: string): Promise<GeneratedSubscriptionYaml | null> {
-  const row = await prisma.subscription.findUnique({ where: { token }, include: { autoUpdateState: true } });
-  if (!row) return null;
-  const secrets = readSubscriptionSecrets(row);
-  const { testUrl, testInterval } = getEffectiveTestOptions(secrets.config);
-  const proxyProviders = buildProxyProvidersFromConfig(secrets.config, { testUrl, testInterval });
-  if (secrets.nodes.length === 0 && !proxyProviders) return null;
+function renderSubscriptionYaml(inputs: SubscriptionYamlInputs): SubscriptionYamlContent | null {
+  const nodes = decryptJson<ParsedNode[]>(inputs.encryptedNodes, []);
+  const config = decryptJsonObject(inputs.encryptedConfig);
+  const { testUrl, testInterval } = getEffectiveTestOptions(config);
+  const proxyProviders = buildProxyProvidersFromConfig(config, { testUrl, testInterval });
+  if (nodes.length === 0 && !proxyProviders) return null;
   const yaml = generateClashYaml(
-    buildGenerateOptionsFromConfig(secrets.config, {
-      nodes: secrets.nodes,
-      proxyProviders,
-    })
+    buildGenerateOptionsFromConfig(config, { nodes, proxyProviders })
   );
+  const subscriptionInfo =
+    normalizeSubscriptionInfoForPersistence(decryptJson<unknown>(inputs.encryptedSubscriptionInfo, {})) ?? {};
+  return { yaml, subscriptionInfo };
+}
+
+function getWorkerSubscriptionYaml(id: string, inputs: SubscriptionYamlInputs): SubscriptionYamlContent | null {
+  const cached = workerYamlCache.get(id);
+  workerYamlCache.delete(id);
+  if (
+    cached?.inputs.encryptedNodes === inputs.encryptedNodes &&
+    cached.inputs.encryptedConfig === inputs.encryptedConfig &&
+    cached.inputs.encryptedSubscriptionInfo === inputs.encryptedSubscriptionInfo
+  ) {
+    workerYamlCache.set(id, cached);
+    return cached.content;
+  }
+
+  const content = renderSubscriptionYaml(inputs);
+  if (content && inputs.encryptedNodes.length + inputs.encryptedConfig.length +
+      (inputs.encryptedSubscriptionInfo?.length ?? 0) + content.yaml.length <= MAX_YAML_CACHE_ENTRY_LENGTH) {
+    if (workerYamlCache.size >= MAX_YAML_CACHE_ENTRIES) {
+      const oldest = workerYamlCache.keys().next();
+      if (!oldest.done) workerYamlCache.delete(oldest.value);
+    }
+    workerYamlCache.set(id, { inputs, content });
+  }
+  return content;
+}
+
+export async function generateSubscriptionYaml(token: string): Promise<GeneratedSubscriptionYaml | null> {
+  const row = await prisma.subscription.findUnique({
+    where: { token },
+    select: {
+      id: true,
+      name: true,
+      autoUpdateInterval: true,
+      encryptedNodes: true,
+      encryptedConfig: true,
+      encryptedSubscriptionInfo: true,
+    },
+  });
+  if (!row) return null;
+  const { id, name, autoUpdateInterval, ...inputs } = row;
+  const content = process.env.SUBBOOST_CLOUDFLARE === "true"
+    ? getWorkerSubscriptionYaml(id, inputs)
+    : renderSubscriptionYaml(inputs);
+  if (!content) return null;
   await prisma.subscription.update({ where: { id: row.id }, data: { lastAccessedAt: new Date() } });
   return {
-    yaml,
-    name: row.name,
-    subscriptionInfo: secrets.subscriptionInfo,
+    ...content,
+    name,
     cacheExpirySeconds: CACHE_TTL_SECONDS,
-    autoUpdateIntervalSeconds: row.autoUpdateInterval,
+    autoUpdateIntervalSeconds: autoUpdateInterval,
     isAdmin: true,
   };
 }

@@ -67,7 +67,13 @@ db:migrate 将 `local/prisma/d1-migrations` 中的 SQLite 迁移应用到远程 
 
 只构建使用 `npm run build:worker`，不需要生产密钥、远程数据库连接或 Cloudflare 登录。
 
-部署后打开站点，使用 LOCAL_SETUP_TOKEN 创建管理员。检查 `/api/health/ready` 应返回 HTTP 200。登录的密码哈希和订阅转换需要一定 CPU，请结合实际负载选择 Workers 套餐，当前限额见 [Workers Limits](https://developers.cloudflare.com/workers/platform/limits/)。
+部署后打开站点，使用 LOCAL_SETUP_TOKEN 创建管理员。检查 `/api/health/ready` 应返回 HTTP 200。
+
+## Free 套餐的 CPU 限额
+
+Free 套餐的 HTTP 请求和 Cron 调用各有 10 ms CPU 预算。普通页面访问直接读取构建生成的 HTML。订阅下载先查询 D1 确认链接有效，同一 Worker 实例可以复用未变更的 YAML。首次生成、大订阅转换、定时刷新及 bcrypt 管理员登录仍可能超出预算。[Workers Limits](https://developers.cloudflare.com/workers/platform/limits/)
+
+遇到 1102 时，在 Cloudflare 控制台打开对应 Worker 的 **Logs**，按 `exceededCpu` 筛选，查看超限的请求路径或 Cron 事件以及 CPU Time。分享日志前请遮盖订阅链接里的 token。
 
 ## Cloudflare Git 自动部署
 

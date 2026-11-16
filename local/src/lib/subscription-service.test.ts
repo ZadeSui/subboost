@@ -672,4 +672,31 @@ describe("local subscription service", () => {
     mocks.buildProxyProvidersFromConfig.mockReturnValueOnce({ provider: { url: "https://example.com/provider.yaml" } });
     await expect(generateSubscriptionYaml("provider-only")).resolves.toMatchObject({ yaml: "mixed-port: 7890\n" });
   });
+
+  it("reuses Worker YAML only while the live token and encrypted input match", async () => {
+    vi.stubEnv("SUBBOOST_CLOUDFLARE", "true");
+    try {
+      const original = row({ id: "worker-cache-sub" });
+      const changed = { ...original, name: "Renamed", autoUpdateInterval: 3600 };
+      mocks.prisma.subscription.findUnique
+        .mockResolvedValueOnce(original)
+        .mockResolvedValueOnce(changed)
+        .mockResolvedValueOnce({ ...changed, encryptedNodes: JSON.stringify([{ name: "New node" }]) })
+        .mockResolvedValueOnce(null);
+
+      await expect(generateSubscriptionYaml("worker-token")).resolves.toMatchObject({ name: original.name });
+      await expect(generateSubscriptionYaml("worker-token")).resolves.toMatchObject({
+        name: "Renamed",
+        autoUpdateIntervalSeconds: 3600,
+      });
+      expect(mocks.generateClashYaml).toHaveBeenCalledTimes(1);
+
+      await generateSubscriptionYaml("worker-token");
+      expect(mocks.generateClashYaml).toHaveBeenCalledTimes(2);
+      await expect(generateSubscriptionYaml("worker-token")).resolves.toBeNull();
+      expect(mocks.prisma.subscription.update).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
 });
