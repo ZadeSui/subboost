@@ -134,14 +134,17 @@ describe("local subscription auto update service", () => {
   });
 
   it("skips subscriptions that are not due", async () => {
-    mocks.resolveAutoUpdateScheduleState.mockReturnValueOnce({ due: false });
+    const assertLease = vi.fn().mockResolvedValue(undefined);
+    mocks.prisma.subscription.findMany.mockResolvedValueOnce([subscription, { ...subscription, id: "sub-2" }]);
+    mocks.resolveAutoUpdateScheduleState.mockReturnValueOnce({ due: false }).mockReturnValueOnce({ due: false });
 
-    await expect(runLocalSubscriptionAutoUpdateCron(now)).resolves.toEqual(
-      expect.objectContaining({ total: 1, skipped: 1 })
+    await expect(runLocalSubscriptionAutoUpdateCron(now, { assertLease })).resolves.toEqual(
+      expect.objectContaining({ total: 2, skipped: 2 })
     );
 
     expect(mocks.refreshNodeSnapshot).not.toHaveBeenCalled();
     expect(mocks.applyCronUpdateOutcome).not.toHaveBeenCalled();
+    expect(assertLease).toHaveBeenCalledTimes(2);
   });
 
   it("refreshes due subscriptions and writes encrypted cache state", async () => {

@@ -3,7 +3,8 @@ import { json } from "@local/lib/http";
 import { prisma } from "@local/lib/prisma";
 
 export async function GET() {
-  const [setupRequired, admin] = await Promise.all([isSetupRequired(), getCurrentAdmin()]);
+  const admin = await getCurrentAdmin();
+  const setupRequired = admin ? false : await isSetupRequired();
   const [subscriptionCount, templateCount] = admin
     ? await Promise.all([
         prisma.subscription.count({ where: { ownerId: admin.id } }),

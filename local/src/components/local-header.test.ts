@@ -70,11 +70,7 @@ describe("LocalHeader", () => {
 
     expect(fetch).toHaveBeenCalledWith(
       "/api/releases/latest",
-      expect.objectContaining({
-        cache: "no-store",
-        headers: { "Cache-Control": "no-cache" },
-        signal: expect.any(AbortSignal),
-      })
+      { signal: expect.any(AbortSignal) }
     );
     expect(mocks.setState).toHaveBeenCalledWith({
       label: "new",

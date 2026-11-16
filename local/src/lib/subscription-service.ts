@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { writeD1Subscription } from "./d1";
+import { d1Value, getD1Database, writeD1Subscription } from "./d1";
 import { generateClashYaml } from "@subboost/core/generator";
 import { buildGenerateOptionsFromConfig, getEffectiveTestOptions } from "@subboost/core/subscription/config-utils";
 import { buildProxyProvidersFromConfig } from "@subboost/core/subscription/proxy-providers";
@@ -114,6 +114,7 @@ type SubscriptionYamlContent = Pick<GeneratedSubscriptionYaml, "yaml" | "subscri
 const workerYamlCache = new Map<string, { inputs: SubscriptionYamlInputs; content: SubscriptionYamlContent }>();
 const MAX_YAML_CACHE_ENTRIES = 16;
 const MAX_YAML_CACHE_ENTRY_LENGTH = 512 * 1024;
+const WORKER_ACCESS_WRITE_INTERVAL_MS = 60_000;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -513,18 +514,32 @@ export async function generateSubscriptionYaml(token: string): Promise<Generated
       id: true,
       name: true,
       autoUpdateInterval: true,
+      lastAccessedAt: true,
       encryptedNodes: true,
       encryptedConfig: true,
       encryptedSubscriptionInfo: true,
     },
   });
   if (!row) return null;
-  const { id, name, autoUpdateInterval, ...inputs } = row;
-  const content = process.env.SUBBOOST_CLOUDFLARE === "true"
+  const { id, name, autoUpdateInterval, lastAccessedAt, ...inputs } = row;
+  const inWorker = process.env.SUBBOOST_CLOUDFLARE === "true";
+  const content = inWorker
     ? getWorkerSubscriptionYaml(id, inputs)
     : renderSubscriptionYaml(inputs);
   if (!content) return null;
-  await prisma.subscription.update({ where: { id: row.id }, data: { lastAccessedAt: new Date() } });
+  const now = new Date();
+  if (inWorker) {
+    const cutoff = new Date(now.getTime() - WORKER_ACCESS_WRITE_INTERVAL_MS);
+    if (!lastAccessedAt || lastAccessedAt <= cutoff) {
+      // Recheck at write time so concurrent downloads and token rotation cannot record a stale access.
+      await getD1Database().prepare(`UPDATE "Subscription" SET "lastAccessedAt" = ?
+        WHERE "id" = ? AND "token" = ?
+          AND ("lastAccessedAt" IS NULL OR julianday("lastAccessedAt") <= julianday(?))`)
+        .bind(d1Value(now), id, token, d1Value(cutoff)).run();
+    }
+  } else {
+    await prisma.subscription.update({ where: { id }, data: { lastAccessedAt: now } });
+  }
   return {
     ...content,
     name,

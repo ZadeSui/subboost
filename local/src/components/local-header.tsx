@@ -40,8 +40,6 @@ export function LocalHeader() {
     void (async () => {
       try {
         const response = await fetch("/api/releases/latest", {
-          cache: "no-store",
-          headers: { "Cache-Control": "no-cache" },
           signal: controller.signal,
         });
         if (!response.ok) return;

@@ -16,6 +16,7 @@ import {
 } from "./subscription-service";
 
 const mocks = vi.hoisted(() => ({
+  d1Prepare: vi.fn(),
   generateClashYaml: vi.fn(),
   buildGenerateOptionsFromConfig: vi.fn(),
   getEffectiveTestOptions: vi.fn(),
@@ -40,6 +41,11 @@ const mocks = vi.hoisted(() => ({
     subscriptionAutoUpdateState: { upsert: vi.fn() },
     $transaction: vi.fn(),
   },
+}));
+
+vi.mock("./d1", async (importOriginal) => ({
+  ...await importOriginal<typeof import("./d1")>(),
+  getD1Database: () => ({ prepare: mocks.d1Prepare }),
 }));
 
 vi.mock("@subboost/core/generator", () => ({
@@ -677,7 +683,10 @@ describe("local subscription service", () => {
     vi.stubEnv("SUBBOOST_CLOUDFLARE", "true");
     try {
       const original = row({ id: "worker-cache-sub" });
-      const changed = { ...original, name: "Renamed", autoUpdateInterval: 3600 };
+      const changed = { ...original, name: "Renamed", autoUpdateInterval: 3600, lastAccessedAt: new Date() };
+      const run = vi.fn().mockResolvedValue({});
+      const bind = vi.fn().mockReturnValue({ run });
+      mocks.d1Prepare.mockReturnValue({ bind });
       mocks.prisma.subscription.findUnique
         .mockResolvedValueOnce(original)
         .mockResolvedValueOnce(changed)
@@ -694,7 +703,10 @@ describe("local subscription service", () => {
       await generateSubscriptionYaml("worker-token");
       expect(mocks.generateClashYaml).toHaveBeenCalledTimes(2);
       await expect(generateSubscriptionYaml("worker-token")).resolves.toBeNull();
-      expect(mocks.prisma.subscription.update).toHaveBeenCalledTimes(3);
+      expect(mocks.prisma.subscription.update).not.toHaveBeenCalled();
+      expect(run).toHaveBeenCalledTimes(1);
+      expect(mocks.d1Prepare).toHaveBeenCalledWith(expect.stringContaining('"token" = ?'));
+      expect(bind).toHaveBeenCalledWith(expect.any(String), original.id, "worker-token", expect.any(String));
     } finally {
       vi.unstubAllEnvs();
     }

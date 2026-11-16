@@ -118,8 +118,10 @@ function buildVerifiedRule(type: RemoteRuleType, name: string): VerifiedRuleSetI
   };
 }
 
-function matchRule(rule: RuleSetInfo, keyword: string): boolean {
-  const haystack = `${rule.id} ${rule.name} ${rule.nameZh}`.toLowerCase();
+function matchRule(type: RemoteRuleType, name: string, keyword: string): boolean {
+  const featured = featuredRuleByPath.get(`${type}/${name}.mrs`);
+  const id = featured?.id ?? (type === "geoip" ? `${name}-ip` : name);
+  const haystack = `${id} ${featured?.name ?? name} ${featured ? featured.nameZh : name}`.toLowerCase();
   return haystack.includes(keyword);
 }
 
@@ -244,17 +246,6 @@ export function buildRuleCatalogDiff(index: RemoteRuleIndex): RuleCatalogDiff {
     unknownCategories,
     remoteOnlySample,
   };
-}
-
-function buildCandidates(index: RemoteRuleIndex, type: RuleSearchType): Array<{ type: RemoteRuleType; name: string }> {
-  const candidates: Array<{ type: RemoteRuleType; name: string }> = [];
-  if (type === "all" || type === "geosite") {
-    for (const name of index.geosite) candidates.push({ type: "geosite", name });
-  }
-  if (type === "all" || type === "geoip") {
-    for (const name of index.geoip) candidates.push({ type: "geoip", name });
-  }
-  return candidates;
 }
 
 function buildCacheKey(parents: CnCandidateParent[]): string {
@@ -445,20 +436,24 @@ export function createRuleCatalogService(options: RuleCatalogServiceOptions = {}
       };
     }
 
-    const matched: VerifiedRuleSetInfo[] = [];
-    for (const candidate of buildCandidates(index, type)) {
-      const rule = buildVerifiedRule(candidate.type, candidate.name);
-      if (matchRule(rule, keyword)) matched.push(rule);
-    }
-
+    const items: VerifiedRuleSetInfo[] = [];
     const start = (page - 1) * size;
+    let totalMatched = 0;
+    const searchTypes: RemoteRuleType[] = type === "all" ? ["geosite", "geoip"] : [type];
+    for (const searchType of searchTypes) {
+      for (const name of index[searchType]) {
+        if (!matchRule(searchType, name, keyword)) continue;
+        if (totalMatched >= start && items.length < size) items.push(buildVerifiedRule(searchType, name));
+        totalMatched++;
+      }
+    }
     return {
-      items: matched.slice(start, start + size),
+      items,
       keyword: params.keyword,
       type,
       page,
       size,
-      totalMatched: matched.length,
+      totalMatched,
       totalRules,
       fetchedAt: index.fetchedAt,
       expiresAt: index.expiresAt,

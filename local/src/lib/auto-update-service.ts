@@ -308,7 +308,6 @@ export async function runLocalSubscriptionAutoUpdateCron(
 
   const accumulator = createCronUpdateAccumulator(subscriptions.length);
   for (const subscription of subscriptions) {
-    await options.assertLease?.();
     let requestedHosts: string[] = [];
     let attemptStartedAt: Date | null = null;
     try {
@@ -330,6 +329,7 @@ export async function runLocalSubscriptionAutoUpdateCron(
         continue;
       }
 
+      await options.assertLease?.();
       attemptStartedAt = new Date();
       const prepared = await prepareLocalRefresh(subscription, currentAutoUpdateState, attemptStartedAt);
       requestedHosts = prepared.requestedHosts;

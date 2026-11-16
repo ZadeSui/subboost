@@ -171,7 +171,7 @@ describe("local auth and health routes", () => {
 
   it("returns the current admin snapshot and anonymous setup state", async () => {
     const { GET } = await import("./me/route");
-    mocks.isSetupRequired.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    mocks.isSetupRequired.mockResolvedValueOnce(true);
     mocks.getCurrentAdmin.mockResolvedValueOnce({ id: "admin-1", username: "admin" }).mockResolvedValueOnce(null);
     mocks.prisma.subscription.count.mockResolvedValueOnce(2);
     mocks.prisma.localTemplate.count.mockResolvedValueOnce(3);
@@ -190,6 +190,7 @@ describe("local auth and health routes", () => {
       },
     });
 
+    expect(mocks.isSetupRequired).not.toHaveBeenCalled();
     response = await GET();
     payload = await response.json();
     expect(payload).toEqual({ setupRequired: true, authenticated: false, user: null });
