@@ -1,6 +1,10 @@
 /_next/static/*
   Cache-Control: public,max-age=31536000,immutable
 
+/icon.png
+  Cache-Control: public, max-age=3600
+  X-Content-Type-Options: nosniff
+
 /_subboost-pages/*
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
